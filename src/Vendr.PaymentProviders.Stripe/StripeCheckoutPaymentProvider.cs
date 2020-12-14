@@ -37,10 +37,9 @@ namespace Vendr.PaymentProviders.Stripe
             new TransactionMetaDataDefinition("stripeCardCountry", "Stripe Card Country")
         };
 
-        public override PaymentFormResult GenerateForm(OrderReadOnly order, string continueUrl, string cancelUrl, string callbackUrl, StripeCheckoutSettings settings)
+        public Session CreateSession(OrderReadOnly order, string continueUrl, string cancelUrl, StripeCheckoutSettings settings)
         {
             var secretKey = settings.TestMode ? settings.TestSecretKey : settings.LiveSecretKey;
-            var publicKey = settings.TestMode ? settings.TestPublicKey : settings.LivePublicKey;
 
             ConfigureStripe(secretKey);
 
@@ -235,7 +234,7 @@ namespace Vendr.PaymentProviders.Stripe
 
                 lineItems.Add(lineItemOpts);
             }
-            
+
             // Add image to the first item (only if it's not a product link)
             if (!string.IsNullOrWhiteSpace(settings.OrderImage) && lineItems.Count > 0 && lineItems[0].PriceData?.ProductData != null)
             {
@@ -249,7 +248,7 @@ namespace Vendr.PaymentProviders.Stripe
                     "card",
                 },
                 LineItems = lineItems,
-                Mode = hasRecurringItems 
+                Mode = hasRecurringItems
                     ? "subscription"
                     : "payment",
                 ClientReferenceId = order.GenerateOrderReference(),
@@ -280,6 +279,15 @@ namespace Vendr.PaymentProviders.Stripe
 
             var sessionService = new SessionService();
             var session = sessionService.Create(sessionOptions);
+
+            return session;
+        }
+
+        public override PaymentFormResult GenerateForm(OrderReadOnly order, string continueUrl, string cancelUrl, string callbackUrl, StripeCheckoutSettings settings)
+        {
+            var session = CreateSession(order, continueUrl, cancelUrl, settings);
+
+            var publicKey = settings.TestMode ? settings.TestPublicKey : settings.LivePublicKey;
 
             return new PaymentFormResult()
             {
@@ -350,8 +358,9 @@ namespace Vendr.PaymentProviders.Stripe
                         else if (stripeSession.Mode == "subscription")
                         {
                             var subscriptionService = new SubscriptionService();
-                            var subscription = subscriptionService.Get(stripeSession.SubscriptionId, new SubscriptionGetOptions { 
-                                Expand = new List<string>(new[] { 
+                            var subscription = subscriptionService.Get(stripeSession.SubscriptionId, new SubscriptionGetOptions
+                            {
+                                Expand = new List<string>(new[] {
                                     "latest_invoice",
                                     "latest_invoice.charge",
                                     "latest_invoice.payment_intent"
@@ -612,7 +621,7 @@ namespace Vendr.PaymentProviders.Stripe
         {
             return orderLine.Properties.ContainsKey(Constants.Properties.Product.IsRecurringPropertyAlias)
                 && !string.IsNullOrWhiteSpace(orderLine.Properties[Constants.Properties.Product.IsRecurringPropertyAlias])
-                && (orderLine.Properties[Constants.Properties.Product.IsRecurringPropertyAlias] == "1" 
+                && (orderLine.Properties[Constants.Properties.Product.IsRecurringPropertyAlias] == "1"
                     || orderLine.Properties[Constants.Properties.Product.IsRecurringPropertyAlias].Value.Equals("true", StringComparison.OrdinalIgnoreCase));
         }
     }
